@@ -1,5 +1,7 @@
 import asyncio
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
+import threading
 from discord.ext import tasks, commands
 import discord
 import spotipy
@@ -8,6 +10,30 @@ import wavelink
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# --- SERVIDOR WEB MINIATURA PARA QUE RENDER SEA GRATIS ---
+
+
+class SimpleHandler(BaseHTTPRequestHandler):
+
+  def do_GET(self):
+    self.send_response(200)
+    self.end_headers()
+    self.wfile.write(b"Bot de Musica Activo!")
+
+  def log_message(self, format, *args):
+    pass  # Evita saturar los logs con peticiones HTTP
+
+
+def run_web_server():
+  port = int(os.environ.get("PORT", 10000))
+  server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+  server.serve_forever()
+
+
+# Arrancar el servidor web en un hilo secundario
+threading.Thread(target=run_web_server, daemon=True).start()
+# ---------------------------------------------------------
 
 # Configuración de Spotify
 sp = spotipy.Spotify(
@@ -34,7 +60,6 @@ class MusicBot(commands.Bot):
     self.empty_timer = 0
 
   async def setup_hook(self):
-    # Conexión al Nodo Lavalink Público / Externo
     nodes = [
         wavelink.Node(
             uri=os.getenv("LAVALINK_URI"),
