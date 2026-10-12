@@ -60,8 +60,17 @@ class MusicBot(commands.Bot):
           uri=os.getenv("LAVALINK_URI"),
           password=os.getenv("LAVALINK_PASSWORD"),
       )
-      await wavelink.Pool.connect(client=self, nodes=[node])
+      # Forzamos un límite de 10 segundos para evitar que se congele en silencio
+      await asyncio.wait_for(
+          wavelink.Pool.connect(client=self, nodes=[node]), timeout=10.0
+      )
       print("[DEBUG] ¡Conexión con Lavalink enviada con éxito!")
+    except asyncio.TimeoutError:
+      print(
+          "[ERROR CRITICO] ⏳ La conexión con Lavalink agotó el tiempo límite"
+          " (Timeout). El nodo público está bloqueando o ignorando las"
+          " peticiones desde Render."
+      )
     except Exception as e:
       print(f"[ERROR CRITICO] Falló la conexión con Lavalink: {e}")
 
@@ -80,10 +89,7 @@ bot = MusicBot()
 
 @bot.listen()
 async def on_wavelink_node_ready(node: wavelink.Node):
-  print(
-      f"[DEBUG] ✅ ¡Nodo Lavalink '{node.identifier}' conectado y listo para"
-      " reproducir!"
-  )
+  print(f"[DEBUG] ✅ ¡Nodo Lavalink '{node.identifier}' conectado y listo!")
 
 
 @bot.tree.command(
@@ -98,15 +104,14 @@ async def start(interaction: discord.Interaction):
     )
     return
 
-  # Verificar si hay nodos conectados
   try:
     node = wavelink.Pool.get_node()
     if not node:
       raise Exception("No hay nodo disponible")
   except Exception:
     await interaction.response.send_message(
-        "⚠️ El servidor de audio (Lavalink) no está conectado. Revisa los logs"
-        " en Render para ver el error exacto.",
+        "⚠️ El servidor de audio (Lavalink) no está conectado debido a un"
+        " bloque de red o timeout. Revisa los logs en Render.",
         ephemeral=True,
     )
     return
