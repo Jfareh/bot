@@ -83,13 +83,13 @@ class MusicBot(commands.Bot):
 
 
 # ==========================================
-# 1. PRIMERO INSTANCIAMOS EL BOT
+# 1. INSTANCIAMOS EL BOT
 # ==========================================
 bot = MusicBot()
 
 
 # ==========================================
-# 2. LUEGO AGREGAMOS LOS EVENTOS Y COMANDOS
+# 2. EVENTOS Y COMANDOS
 # ==========================================
 @bot.listen()
 async def on_wavelink_node_ready(node: wavelink.Node):
@@ -119,11 +119,11 @@ async def start(interaction: discord.Interaction):
     node = wavelink.Pool.get_node()
     if not node:
       raise Exception("No hay nodo disponible")
-    except Exception:
-      await interaction.response.send_message(
-          "⚠️ El servidor de audio (Lavalink) no está conectado.", ephemeral=True
-      )
-      return
+  except Exception:
+    await interaction.response.send_message(
+        "⚠️ El servidor de audio (Lavalink) no está conectado.", ephemeral=True
+    )
+    return
 
   voice_channel = interaction.user.voice.channel
   player: wavelink.Player = interaction.guild.voice_client
