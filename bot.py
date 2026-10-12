@@ -54,15 +54,16 @@ class MusicBot(commands.Bot):
     super().__init__(command_prefix="!", intents=intents)
 
   async def setup_hook(self):
-    print("[DEBUG] Conectando con el nodo Lavalink...")
+    print("[DEBUG] Intentando conectar con el nodo Lavalink...")
     try:
       node = wavelink.Node(
           uri=os.getenv("LAVALINK_URI"),
           password=os.getenv("LAVALINK_PASSWORD"),
       )
       await wavelink.Pool.connect(client=self, nodes=[node])
+      print("[DEBUG] ¡Conexión con Lavalink enviada con éxito!")
     except Exception as e:
-      print(f"[ERROR] No se pudo iniciar el nodo Lavalink: {e}")
+      print(f"[ERROR CRITICO] Falló la conexión con Lavalink: {e}")
 
     for guild in self.guilds:
       self.tree.clear_commands(guild=guild)
@@ -79,7 +80,10 @@ bot = MusicBot()
 
 @bot.listen()
 async def on_wavelink_node_ready(node: wavelink.Node):
-  print(f"[DEBUG] ¡Nodo Lavalink '{node.identifier}' conectado y listo!")
+  print(
+      f"[DEBUG] ✅ ¡Nodo Lavalink '{node.identifier}' conectado y listo para"
+      " reproducir!"
+  )
 
 
 @bot.tree.command(
@@ -94,14 +98,15 @@ async def start(interaction: discord.Interaction):
     )
     return
 
-  # Comprobar si hay un nodo de Wavelink conectado antes de continuar
+  # Verificar si hay nodos conectados
   try:
-    wavelink.Pool.get_node()
+    node = wavelink.Pool.get_node()
+    if not node:
+      raise Exception("No hay nodo disponible")
   except Exception:
     await interaction.response.send_message(
-        "⚠️ El servidor de audio (Lavalink) todavía no está conectado o está"
-        " tardando en responder. Revisa los logs en Render o intenta de nuevo"
-        " en unos segundos.",
+        "⚠️ El servidor de audio (Lavalink) no está conectado. Revisa los logs"
+        " en Render para ver el error exacto.",
         ephemeral=True,
     )
     return
