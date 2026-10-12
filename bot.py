@@ -62,12 +62,14 @@ class MusicBot(commands.Bot):
     await wavelink.Pool.connect(client=self, nodes=[node])
     print("[DEBUG] ¡Nodo Lavalink conectado correctamente!")
 
-    # Sincronizar los Slash Commands con Discord
-    await self.tree.sync()
-    print("[DEBUG] Slash commands sincronizados.")
-
   async def on_ready(self):
     print(f"Bot conectado como {self.user} (ID: {self.user.id})")
+    # Forzar la sincronización instantánea en todos los servidores donde está el bot
+    for guild in self.guilds:
+      self.tree.clear_commands(guild=guild)  # Limpia comandos viejos
+      self.tree.copy_global_to(guild=guild)
+      await self.tree.sync(guild=guild)
+    print("[DEBUG] ¡Comandos /start y /stop sincronizados al instante!")
 
 
 bot = MusicBot()
@@ -78,7 +80,6 @@ bot = MusicBot()
     description="Conecta al bot a tu canal de voz y reproduce la playlist",
 )
 async def start(interaction: discord.Interaction):
-  # Verificar si el usuario está en un canal de voz
   if not interaction.user.voice or not interaction.user.voice.channel:
     await interaction.response.send_message(
         "¡Debes estar conectado a un canal de voz para usar este comando!",
@@ -89,7 +90,6 @@ async def start(interaction: discord.Interaction):
   voice_channel = interaction.user.voice.channel
   player: wavelink.Player = interaction.guild.voice_client
 
-  # Responder primero para que Discord no dé timeout mientras busca las canciones
   await interaction.response.defer()
 
   if not player:
@@ -102,7 +102,6 @@ async def start(interaction: discord.Interaction):
       return
 
   try:
-    # Buscar pistas de la playlist de Spotify
     tracks = await wavelink.Playable.search(
         f"https://open.spotify.com/playlist/{playlist_id}"
     )
