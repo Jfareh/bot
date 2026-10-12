@@ -60,13 +60,12 @@ class MusicBot(commands.Bot):
     self.empty_timer = 0
 
   async def setup_hook(self):
-    nodes = [
-        wavelink.Node(
-            uri=os.getenv("LAVALINK_URI"),
-            password=os.getenv("LAVALINK_PASSWORD"),
-        )
-    ]
-    await wavelink.Pool.init(nodes=nodes)
+    # Conexión actualizada para la versión moderna de Wavelink
+    node = wavelink.Node(
+        uri=os.getenv("LAVALINK_URI"),
+        password=os.getenv("LAVALINK_PASSWORD"),
+    )
+    await wavelink.Pool.connect(client=self, nodes=[node])
 
   async def on_ready(self):
     print(f"Bot conectado como {self.user} (ID: {self.user.id})")
