@@ -71,30 +71,47 @@ class MusicBot(commands.Bot):
   @tasks.loop(seconds=10)
   async def playlist_monitor(self):
     try:
+      print("[DEBUG] Leyendo playlist de Spotify...")
       results = sp.playlist_tracks(playlist_id)
       current_tracks = [
           item["track"]["uri"]
           for item in results["items"]
           if item["track"] and item["track"]["uri"]
       ]
+      print(f"[DEBUG] Canciones encontradas en playlist: {len(current_tracks)}")
 
       if not self.guilds:
+        print("[DEBUG] El bot no está en ningún servidor todavía.")
         return
+
       guild = self.guilds[0]
+      print(f"[DEBUG] Servidor actual: {guild.name}")
       player: wavelink.Player = guild.voice_client
 
-      # Si hay canciones en la lista y el bot NO está conectado a un canal
       if current_tracks and not player:
+        print(
+            f"[DEBUG] Buscando canal de voz con nombre: '{voice_channel_name}'"
+        )
         voice_channel = discord.utils.get(
             guild.voice_channels, name=voice_channel_name
         )
         if voice_channel:
+          print(
+              f"[DEBUG] ¡Canal encontrado! Conectando a {voice_channel.name}..."
+          )
           player = await voice_channel.connect(cls=wavelink.Player)
-          print(f"Conectado automáticamente a {voice_channel.name}")
+          print(f"Conectado exitosamente a {voice_channel.name}")
+        else:
+          print(
+              f"[DEBUG] ADVERTENCIA: No se encontró ningún canal de voz llamado"
+              f" '{voice_channel_name}'. Canales disponibles en el servidor:"
+              f" {[vc.name for vc in guild.voice_channels]}"
+          )
 
       if player and player.connected:
         if not player.playing and player.queue.is_empty:
           if current_tracks:
+            print("[DEBUG] Buscando pistas en Wavelink para reproducir...")
             tracks = await wavelink.Playable.search(
                 f"https://open.spotify.com/playlist/{playlist_id}"
             )
@@ -104,6 +121,7 @@ class MusicBot(commands.Bot):
               else:
                 player.queue.put(tracks[0])
               await player.play(player.queue.get())
+              print("[DEBUG] ¡Reproduciendo música!")
               self.empty_timer = 0
           else:
             self.empty_timer += 10
@@ -115,7 +133,7 @@ class MusicBot(commands.Bot):
           self.empty_timer = 0
 
     except Exception as e:
-      print(f"Error en el monitor de playlist: {e}")
+      print(f"[ERROR] Error en el monitor de playlist: {e}")
 
   @playlist_monitor.before_loop
   async def before_monitor(self):
