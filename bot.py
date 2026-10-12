@@ -2,7 +2,7 @@ import asyncio
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import threading
-from discord.ext import tasks, commands
+from discord.ext import commands
 import discord
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -42,7 +42,6 @@ sp = spotipy.Spotify(
 )
 
 playlist_id = os.getenv("SPOTIFY_PLAYLIST_ID")
-voice_channel_name = os.getenv("VOICE_CHANNEL_NAME", "general")
 
 
 class MusicBot(commands.Bot):
@@ -54,11 +53,8 @@ class MusicBot(commands.Bot):
     intents.voice_states = True
     super().__init__(command_prefix="!", intents=intents)
 
-    self.empty_timer = 0
-
   async def setup_hook(self):
-    print("[DEBUG] Intentando conectar con el nodo Lavalink...")
-    # Wavelink detecta la seguridad automáticamente por el prefijo https:// de la URI
+    print("[DEBUG] Conectando con el nodo Lavalink...")
     node = wavelink.Node(
         uri=os.getenv("LAVALINK_URI"),
         password=os.getenv("LAVALINK_PASSWORD"),
@@ -66,75 +62,93 @@ class MusicBot(commands.Bot):
     await wavelink.Pool.connect(client=self, nodes=[node])
     print("[DEBUG] ¡Nodo Lavalink conectado correctamente!")
 
+    # Sincronizar los Slash Commands con Discord
+    await self.tree.sync()
+    print("[DEBUG] Slash commands sincronizados.")
+
   async def on_ready(self):
     print(f"Bot conectado como {self.user} (ID: {self.user.id})")
-    if not self.playlist_monitor.is_running():
-      self.playlist_monitor.start()
-
-  @tasks.loop(seconds=10)
-  async def playlist_monitor(self):
-    try:
-      print("[DEBUG] Leyendo playlist de Spotify...")
-      results = sp.playlist_tracks(playlist_id)
-      current_tracks = [
-          item["track"]["uri"]
-          for item in results["items"]
-          if item["track"] and item["track"]["uri"]
-      ]
-      print(f"[DEBUG] Canciones encontradas: {len(current_tracks)}")
-
-      if not self.guilds:
-        return
-
-      guild = self.guilds[0]
-      player: wavelink.Player = guild.voice_client
-
-      if current_tracks and not player:
-        voice_channel = discord.utils.get(
-            guild.voice_channels, name=voice_channel_name
-        )
-        if voice_channel:
-          print(f"Conectando a {voice_channel.name}...")
-          player = await voice_channel.connect(cls=wavelink.Player)
-          print(f"¡Conectado exitosamente a {voice_channel.name}!")
-        else:
-          print(
-              f"[DEBUG] No se encontró el canal '{voice_channel_name}'. Canales:"
-              f" {[vc.name for vc in guild.voice_channels]}"
-          )
-
-      if player and player.connected:
-        if not player.playing and player.queue.is_empty:
-          if current_tracks:
-            tracks = await wavelink.Playable.search(
-                f"https://open.spotify.com/playlist/{playlist_id}"
-            )
-            if tracks:
-              if isinstance(tracks, wavelink.Playlist):
-                player.queue.extend(tracks.tracks)
-              else:
-                player.queue.put(tracks[0])
-              await player.play(player.queue.get())
-              print("[DEBUG] ¡Reproduciendo música!")
-              self.empty_timer = 0
-          else:
-            self.empty_timer += 10
-            if self.empty_timer >= 300:
-              await player.disconnect()
-              print("Desconectado por inactividad.")
-              self.empty_timer = 0
-        else:
-          self.empty_timer = 0
-
-    except Exception as e:
-      print(f"[ERROR] {e}")
-
-  @playlist_monitor.before_loop
-  async def before_monitor(self):
-    await self.wait_until_ready()
 
 
 bot = MusicBot()
+
+
+@bot.tree.command(
+    name="start",
+    description="Conecta al bot a tu canal de voz y reproduce la playlist",
+)
+async def start(interaction: discord.Interaction):
+  # Verificar si el usuario está en un canal de voz
+  if not interaction.user.voice or not interaction.user.voice.channel:
+    await interaction.response.send_message(
+        "¡Debes estar conectado a un canal de voz para usar este comando!",
+        ephemeral=True,
+    )
+    return
+
+  voice_channel = interaction.user.voice.channel
+  player: wavelink.Player = interaction.guild.voice_client
+
+  # Responder primero para que Discord no dé timeout mientras busca las canciones
+  await interaction.response.defer()
+
+  if not player:
+    try:
+      player = await voice_channel.connect(cls=wavelink.Player)
+    except Exception as e:
+      await interaction.followup.send(
+          f"No se pudo conectar al canal de voz: {e}"
+      )
+      return
+
+  try:
+    # Buscar pistas de la playlist de Spotify
+    tracks = await wavelink.Playable.search(
+        f"https://open.spotify.com/playlist/{playlist_id}"
+    )
+    if not tracks:
+      await interaction.followup.send(
+          "No se encontraron canciones en la playlist de Spotify."
+      )
+      return
+
+    if isinstance(tracks, wavelink.Playlist):
+      player.queue.extend(tracks.tracks)
+    else:
+      player.queue.put(tracks[0])
+
+    if not player.playing:
+      await player.play(player.queue.get())
+      await interaction.followup.send(
+          f"¡Conectado a **{voice_channel.name}** y reproduciendo la playlist"
+          " de Spotify! 🎶"
+      )
+    else:
+      await interaction.followup.send(
+          "¡Canciones añadidas a la cola de reproducción!"
+      )
+
+  except Exception as e:
+    await interaction.followup.send(
+        f"Ocurrió un error al cargar la música: {e}"
+    )
+
+
+@bot.tree.command(
+    name="stop", description="Detiene la música y desconecta al bot del canal"
+)
+async def stop(interaction: discord.Interaction):
+  player: wavelink.Player = interaction.guild.voice_client
+  if player:
+    await player.disconnect()
+    await interaction.response.send_message(
+        "¡Música detenida y bot desconectado del canal de voz! 👋"
+    )
+  else:
+    await interaction.response.send_message(
+        "El bot no está conectado a ningún canal de voz.", ephemeral=True
+    )
+
 
 if __name__ == "__main__":
   bot.run(os.getenv("DISCORD_TOKEN"))
