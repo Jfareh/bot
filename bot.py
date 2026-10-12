@@ -55,24 +55,31 @@ class MusicBot(commands.Bot):
 
   async def setup_hook(self):
     print("[DEBUG] Conectando con el nodo Lavalink...")
-    node = wavelink.Node(
-        uri=os.getenv("LAVALINK_URI"),
-        password=os.getenv("LAVALINK_PASSWORD"),
-    )
-    await wavelink.Pool.connect(client=self, nodes=[node])
-    print("[DEBUG] ¡Nodo Lavalink conectado correctamente!")
+    try:
+      node = wavelink.Node(
+          uri=os.getenv("LAVALINK_URI"),
+          password=os.getenv("LAVALINK_PASSWORD"),
+      )
+      await wavelink.Pool.connect(client=self, nodes=[node])
+    except Exception as e:
+      print(f"[ERROR] No se pudo iniciar el nodo Lavalink: {e}")
+
+    for guild in self.guilds:
+      self.tree.clear_commands(guild=guild)
+      self.tree.copy_global_to(guild=guild)
+      await self.tree.sync(guild=guild)
+    print("[DEBUG] Comandos sincronizados.")
 
   async def on_ready(self):
     print(f"Bot conectado como {self.user} (ID: {self.user.id})")
-    # Forzar la sincronización instantánea en todos los servidores donde está el bot
-    for guild in self.guilds:
-      self.tree.clear_commands(guild=guild)  # Limpia comandos viejos
-      self.tree.copy_global_to(guild=guild)
-      await self.tree.sync(guild=guild)
-    print("[DEBUG] ¡Comandos /start y /stop sincronizados al instante!")
 
 
 bot = MusicBot()
+
+
+@bot.listen()
+async def on_wavelink_node_ready(node: wavelink.Node):
+  print(f"[DEBUG] ¡Nodo Lavalink '{node.identifier}' conectado y listo!")
 
 
 @bot.tree.command(
@@ -83,6 +90,18 @@ async def start(interaction: discord.Interaction):
   if not interaction.user.voice or not interaction.user.voice.channel:
     await interaction.response.send_message(
         "¡Debes estar conectado a un canal de voz para usar este comando!",
+        ephemeral=True,
+    )
+    return
+
+  # Comprobar si hay un nodo de Wavelink conectado antes de continuar
+  try:
+    wavelink.Pool.get_node()
+  except Exception:
+    await interaction.response.send_message(
+        "⚠️ El servidor de audio (Lavalink) todavía no está conectado o está"
+        " tardando en responder. Revisa los logs en Render o intenta de nuevo"
+        " en unos segundos.",
         ephemeral=True,
     )
     return
