@@ -22,7 +22,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
     self.wfile.write(b"Bot de Musica Activo!")
 
   def log_message(self, format, *args):
-    pass  # Evita saturar los logs con peticiones HTTP
+    pass
 
 
 def run_web_server():
@@ -31,11 +31,9 @@ def run_web_server():
   server.serve_forever()
 
 
-# Arrancar el servidor web en un hilo secundario
 threading.Thread(target=run_web_server, daemon=True).start()
 # ---------------------------------------------------------
 
-# Configuración de Spotify
 sp = spotipy.Spotify(
     auth_manager=SpotifyClientCredentials(
         client_id=os.getenv("SPOTIFY_CLIENT_ID"),
@@ -56,11 +54,9 @@ class MusicBot(commands.Bot):
     intents.voice_states = True
     super().__init__(command_prefix="!", intents=intents)
 
-    self.last_track_uris = set()
     self.empty_timer = 0
 
   async def setup_hook(self):
-    # Conexión actualizada para la versión moderna de Wavelink
     node = wavelink.Node(
         uri=os.getenv("LAVALINK_URI"),
         password=os.getenv("LAVALINK_PASSWORD"),
@@ -81,22 +77,20 @@ class MusicBot(commands.Bot):
           for item in results["items"]
           if item["track"] and item["track"]["uri"]
       ]
-      current_tracks_set = set(current_tracks)
 
       if not self.guilds:
         return
       guild = self.guilds[0]
       player: wavelink.Player = guild.voice_client
 
-      if current_tracks_set - self.last_track_uris and not player:
+      # Si hay canciones en la lista y el bot NO está conectado a un canal
+      if current_tracks and not player:
         voice_channel = discord.utils.get(
             guild.voice_channels, name=voice_channel_name
         )
         if voice_channel:
           player = await voice_channel.connect(cls=wavelink.Player)
           print(f"Conectado automáticamente a {voice_channel.name}")
-
-      self.last_track_uris = current_tracks_set
 
       if player and player.connected:
         if not player.playing and player.queue.is_empty:
