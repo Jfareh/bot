@@ -58,10 +58,10 @@ class MusicBot(commands.Bot):
 
   async def setup_hook(self):
     print("[DEBUG] Intentando conectar con el nodo Lavalink...")
+    # Wavelink detecta la seguridad automáticamente por el prefijo https:// de la URI
     node = wavelink.Node(
         uri=os.getenv("LAVALINK_URI"),
         password=os.getenv("LAVALINK_PASSWORD"),
-        secure=True,  # Forzamos conexión segura HTTPS/WSS
     )
     await wavelink.Pool.connect(client=self, nodes=[node])
     print("[DEBUG] ¡Nodo Lavalink conectado correctamente!")
